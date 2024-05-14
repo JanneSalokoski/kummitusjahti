@@ -2,6 +2,8 @@
 
 import pygame
 
+from enum import Enum
+
 class Point:
     """An immutable cartesian point with x and y coordinates"""
     def __init__(self, x: int, y: int):
@@ -46,10 +48,94 @@ class Borders:
         """"Read only access to the bottom-border"""
         return self.__bottom
 
+ObjectType = Enum("ObjectType", ["PLAYER", "MONSTER", "COIN", "DOOR", "FLAMES", "ROPE", "FLOOR"])
 class Object:
     """Represent a generic game object"""
-    def __init__(self):
+    def __init__(self, type: ObjectType):
+        self.__type: ObjectType = type
+        self.__pos: Point = Point(0,0)
+        self.__vel: Point = Point(0,0)
+        self.__hitbox: Point = Point(0,0)
+
+    @property
+    def hitbox(self) -> Point:
+        """"Read only access to the hitbox of the object"""
+        return self.__hitbox
+
+    @classmethod
+    def hitbox(self, x: int, y: int) -> None:
+        """"Update the hitbox"""
+        self.__hitbox = Point(x,y)
+    
+
+    @property
+    def type(self) -> ObjectType:
+        """"Read only access to the type of the object"""
+        return self.__type
+
+    @property
+    def pos(self) -> Point:
+        return self.__pos
+
+    def set_pos(self, x: int, y: int) -> None:
+        self.__pos = Point(x,y)
+
+    @property
+    def vel(self) -> Point:
+        return self.__vel
+
+    def set_vel(self, x: int, y: int) -> None:
+        self.__vel = Point(x,y)
+
+    def move(self, borders) -> None:
+        self.update_velocity(borders)
+
+        x = min(borders.right-self.hitbox.x, max(borders.left, self.pos.x + self.vel.x))
+        y = min(borders.bottom-self.hitbox.y, max(borders.top, self.pos.y + self.vel.y))
+
+        self.set_pos(x, y)
+
+    def update_velocity(self, borders) -> None:
         pass
+
+class ImageObject(Object):
+    """An image-object that is loaded by pygame"""
+    def __init__(self, type: ObjectType):
+        super().__init__(type)
+        self.__image_file: str = self.__get_object_image()
+        self.__image_object = pygame.image.load(self.__image_file)
+        self.hitbox = Point(self.__image_object.get_width(), self.__image_object.get_height())
+        
+    def __get_object_image(self) -> str:
+        """Get the matching image-file for the objects type"""
+        match self.type:
+            case ObjectType.PLAYER:
+                return "robo.png"
+            case ObjectType.MONSTER:
+                return "hirvio.png"
+            case ObjectType.COIN:
+                return "kolikko.png"
+            case ObjectType.DOOR:
+                return "ovi.png"
+
+    def render(self, display: any) -> None:
+        display.blit(self.__image_object, (self.pos.x, self.pos.y))
+
+class RenderedObject(Object):
+    """An object that is rendered, instead of loaded"""
+    def __init__(self, type: ObjectType):
+        super().__init__(type)
+
+class Player(ImageObject):
+    """"Represent the player"""
+    def __init__(self):
+        super().__init__(ObjectType.PLAYER)
+
+    def update_velocity(self, borders: Borders) -> None:
+        if self.pos.y < borders.bottom - self.hitbox.y:
+            self.set_vel(self.vel.x, self.vel.y + 1)
+        else:
+            self.set_vel(self.vel.x, 0)
 
 class Game:
     """An instance of a pygame-based game"""
@@ -90,9 +176,25 @@ class Game:
             (self.borders.right, self.borders.bottom)
         )
 
+    def __create_image_object(self, type: ObjectType, x: int, y: int) -> ImageObject:
+        obj = ImageObject(type)
+        obj.set_pos(x, y)
+
+        self.__objects.append(obj)
+
+    def __create_player(self, x: int, y: int) -> Player:
+        player = Player()
+        player.set_pos(x, y)
+
+        self.__objects.append(player)
+
+    def __spawn_objects(self):
+        """Spawn all of the objects"""
+        self.__create_player(20, self.borders.bottom-200)
+
     def init_game(self) -> None:
         """Initialize the game itself"""
-        pass
+        self.__spawn_objects()
 
     def init(self) -> None:
         """Initialize whole class"""
@@ -111,9 +213,20 @@ class Game:
             if event.type == pygame.QUIT:
                 exit()
 
+    def __move_objects(self) -> None:
+        for obj in self.objects:
+            obj.move(self.borders)
+
+    def __render_objects(self) -> None:
+        for obj in self.objects:
+            obj.render(self.display)
+
     def __render_frame(self) -> None:
         """Render a single frame"""
         self.display.fill((15, 17, 20))
+
+        self.__move_objects()
+        self.__render_objects()
 
         pygame.display.flip()
         self.clock.tick(60)
